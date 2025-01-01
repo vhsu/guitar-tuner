@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Enhanced Guitar Tuner (String & Beep)</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 2em;
+      background: #fafafa;
+      color: #333;
+    }
+    h1 {
+      color: #444;
+    }
+    .instructions {
+      background: #fff9c4;
+      border: 1px solid #ffecb3;
+      padding: 1em;
+      border-radius: 5px;
+      margin-bottom: 1em;
+      max-width: 600px;
+    }
+    button {
+      padding: 0.8em 1.2em;
+      font-size: 1em;
+      cursor: pointer;
+      border: none;
+      border-radius: 4px;
+      background: #4caf50;
+      color: #fff;
+      margin-bottom: 1em;
+    }
+    button:hover {
+      background: #45a049;
+    }
+    #pitchDisplay {
+      font-size: 1.2em;
+      font-weight: bold;
+      margin-bottom: 1em;
+    }
+    .meter-container {
+      margin: 1em 0;
+      max-width: 400px;
+    }
+    .meter-label {
+      margin-bottom: 0.2em;
+      font-size: 0.9em;
+      color: #666;
+    }
+    meter {
+      width: 100%;
+      height: 1.3em;
+    }
+    /* Basic color steps for meter if browser supports them */
+    meter::-webkit-meter-optimum-value {
+      background: limegreen;
+    }
+    meter::-webkit-meter-suboptimum-value {
+      background: gold;
+    }
+    meter::-webkit-meter-even-less-good-value {
+      background: red;
+    }
+
+    /* New styling for string info */
+    #stringDetected {
+      font-size: 1.2em;
+      font-weight: bold;
+      margin: 0.5em 0;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <h1>Guitar Tuner</h1>
+
+  <div class="instructions">
+    <p><strong>How to use:</strong></p>
+    <ol>
+      <li>Click the <strong>Start Tuner</strong> button and allow microphone access.</li>
+      <li>Pluck one guitar string at a time (E, A, D, G, B, or E).</li>
+      <li>Check the <strong>Detected Pitch</strong> and <strong>Nearest String</strong> readouts.</li>
+      <li>If the tuning is good (±5 cents), you should see <span style="color: green;">green</span> text and hear a short beep every couple of seconds.</li>
+    </ol>
+  </div>
+
+  <button id="startBtn">Start Tuner</button>
+  <!-- We’ll show which string was detected here -->
+  <div id="stringDetected">No string detected yet</div>
+
+  <div id="pitchDisplay">Not started</div>
+
+  <!-- Meter to show how many cents off we are from the nearest string -->
+  <div class="meter-container">
+    <div class="meter-label">Cents off (–50 to +50)</div>
+    <meter id="tuningMeter" min="-50" max="50" value="0" low="-10" high="10" optimum="0"></meter>
+  </div>
+
+  <script>
+    const startBtn = document.getElementById("startBtn");
+    const pitchDisplay = document.getElementById("pitchDisplay");
+    const tuningMeter = document.getElementById("tuningMeter");
+    const stringDetectedElem = document.getElementById("stringDetected");
+
+    let audioContext;
+    let micStream;
+    let source;
+    let processor;
+
+    // Standard guitar strings (lowest to highest)
+    const guitarStrings = [
+      { note: "E2", freq: 82.41 },
+      { note: "A2", freq: 110.00 },
+      { note: "D3", freq: 146.83 },
+      { note: "G3", freq: 196.00 },
+      { note: "B3", freq: 246.94 },
+      { note: "E4", freq: 329.63 },
+    ];
+
+    // Tuning thresholds
+    const GREEN_THRESHOLD = 5;   // ±5 cents is "in tune"
+    const YELLOW_THRESHOLD = 10; // ±10 cents is "close"
+    const BUFFER_SIZE = 8192;    // larger for low freq detection
+    const YIN_THRESHOLD = 0.15;  // YIN param
+    const RMS_THRESHOLD = 0.01;  // skip quiet frames
+    const SMOOTHING_FRAMES = 5;  // average last few pitches
+    let pitchHistory = [];
+
+    // For beep feedback
+    let lastBeepTime = 0;           // when we last beeped
+    const BEEP_DEBOUNCE_SECONDS = 2; // only beep at most once every 2s
+    // You can tweak beep frequency, duration, etc.
+    const BEEP_FREQUENCY = 880;      // A5 = 880 Hz
+    const BEEP_DURATION = 0.15;      // beep length in seconds
+
+    startBtn.addEventListener("click", startTuner);
+
+    async function startTuner() {
+      if (audioContext) return; // if already started
+
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+      try {
+        // Request microphone input
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        source = audioContext.createMediaStreamSource(micStream);
+
+        // Create ScriptProcessorNode for real-time audio processing
+        processor = audioContext.createScriptProcessor(BUFFER_SIZE, 1, 1);
+
+        processor.onaudioprocess = (event) => {
+          const inputBuffer = event.inputBuffer.getChannelData(0);
+          const rms = calculateRMS(inputBuffer);
+
+          if (rms < RMS_THRESHOLD) {
+            pitchDisplay.textContent = "No strong pitch detected (too quiet)";
+            pitchDisplay.style.color = "black";
+            stringDetectedElem.textContent = "No string detected yet";
+            tuningMeter.value = 0;
+            return;
+          }
+
+          const rawFrequency = yinPitchDetector(inputBuffer, audioContext.sampleRate, YIN_THRESHOLD);
+
+          if (rawFrequency > 0) {
+            // Smooth the pitch
+            pitchHistory.push(rawFrequency);
+            if (pitchHistory.length > SMOOTHING_FRAMES) {
+              pitchHistory.shift();
+            }
+            const frequency = averageArray(pitchHistory);
+
+            // Nearest string
+            const nearestString = findNearestString(frequency);
+            stringDetectedElem.textContent = `String Detected: ${nearestString.note}`;
+
+            // Cents off
+            const diffCents = 1200 * Math.log2(frequency / nearestString.freq);
+
+            // Show info
+            pitchDisplay.textContent =
+              `Detected: ${frequency.toFixed(2)} Hz | ` +
+              `Nearest: ${nearestString.note} (${nearestString.freq.toFixed(2)} Hz) | ` +
+              `Off by: ${diffCents.toFixed(2)} cents`;
+
+            // Meter
+            let meterValue = Math.max(-50, Math.min(50, diffCents));
+            tuningMeter.value = meterValue;
+
+            // Color and beep
+            const absDiff = Math.abs(diffCents);
+            if (absDiff <= GREEN_THRESHOLD) {
+              pitchDisplay.style.color = "green";
+              // Trigger beep if enough time has passed
+              const now = audioContext.currentTime;
+              if (now - lastBeepTime > BEEP_DEBOUNCE_SECONDS) {
+                playBeep();
+                lastBeepTime = now;
+              }
+            } else if (absDiff <= YELLOW_THRESHOLD) {
+              pitchDisplay.style.color = "goldenrod";
+            } else {
+              pitchDisplay.style.color = "red";
+            }
+          } else {
+            pitchDisplay.textContent = "No strong pitch detected";
+            pitchDisplay.style.color = "black";
+            stringDetectedElem.textContent = "No string detected yet";
+            tuningMeter.value = 0;
+          }
+        };
+
+        source.connect(processor);
+        processor.connect(audioContext.destination);
+
+        pitchDisplay.textContent = "Tuner started. Pluck one string at a time...";
+      } catch (err) {
+        console.error(err);
+        pitchDisplay.textContent = "Microphone access denied or unavailable.";
+        pitchDisplay.style.color = "red";
+      }
+    }
+
+    function playBeep() {
+      // Create a short beep using an oscillator
+      const beepContext = new AudioContext();
+      const oscillator = beepContext.createOscillator();
+      oscillator.type = "sine";
+      oscillator.frequency.value = BEEP_FREQUENCY;
+      oscillator.connect(beepContext.destination);
+      oscillator.start();
+      oscillator.stop(beepContext.currentTime + BEEP_DURATION);
+    }
+
+    function calculateRMS(buffer) {
+      let sum = 0;
+      for (let i = 0; i < buffer.length; i++) {
+        const val = buffer[i];
+        sum += val * val;
+      }
+      return Math.sqrt(sum / buffer.length);
+    }
+
+    function averageArray(arr) {
+      const sum = arr.reduce((acc, val) => acc + val, 0);
+      return sum / arr.length;
+    }
+
+    function findNearestString(detectedFreq) {
+      let minDiff = Infinity;
+      let nearest = null;
+      for (const str of guitarStrings) {
+        const diff = Math.abs(detectedFreq - str.freq);
+        if (diff < minDiff) {
+          minDiff = diff;
+          nearest = str;
+        }
+      }
+      return nearest;
+    }
+
+    /**
+     * YIN Pitch Detection Algorithm (with adjustable threshold)
+     * Returns the detected pitch in Hz, or -1 if no pitch is detected.
+     */
+    function yinPitchDetector(buffer, sampleRate, threshold) {
+      const halfBufferSize = buffer.length >> 1;
+      let runningSum = 0;
+      let tau = 0;
+
+      // Step 1: Difference function
+      const yinBuffer = new Float32Array(halfBufferSize);
+      for (let t = 0; t < halfBufferSize; t++) {
+        let sum = 0;
+        for (let i = 0; i < halfBufferSize; i++) {
+          const delta = buffer[i] - buffer[i + t];
+          sum += delta * delta;
+        }
+        yinBuffer[t] = sum;
+      }
+
+      // Step 2: Cumulative mean normalized difference
+      yinBuffer[0] = 1;
+      let minVal = Number.MAX_VALUE;
+      let minPos = 0;
+
+      for (let t = 1; t < halfBufferSize; t++) {
+        runningSum += yinBuffer[t];
+        yinBuffer[t] = yinBuffer[t] * t / runningSum;
+
+        if (yinBuffer[t] < minVal) {
+          minVal = yinBuffer[t];
+          minPos = t;
+        }
+        // Step 3: Absolute threshold
+        if (yinBuffer[t] < threshold) {
+          while (t + 1 < halfBufferSize && yinBuffer[t + 1] < yinBuffer[t]) {
+            t++;
+          }
+          tau = t;
+          break;
+        }
+      }
+
+      if (tau === 0) {
+        return -1;
+      }
+
+      // Step 4: Parabolic interpolation
+      const x0 = (tau < 1) ? tau : tau - 1;
+      const x2 = (tau + 1 < halfBufferSize) ? tau + 1 : tau;
+      if (x0 === tau || x2 === tau) {
+        return sampleRate / tau;
+      }
+      const s0 = yinBuffer[x0];
+      const s1 = yinBuffer[tau];
+      const s2 = yinBuffer[x2];
+      const betterTau = tau + (s2 - s0) / (2 * (2 * s1 - s2 - s0));
+
+      return sampleRate / betterTau;
+    }
+  </script>
+</body>
+</html>
