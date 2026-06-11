@@ -1,326 +1,554 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta charset="UTF-8" />
-  <title>Guitar Tuner Online</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 2em;
-      background: #fafafa;
-      color: #333;
-    }
-    h1 {
-      color: #444;
-    }
-    .instructions {
-      background: #fff9c4;
-      border: 1px solid #ffecb3;
-      padding: 1em;
-      border-radius: 5px;
-      margin-bottom: 1em;
-      max-width: 600px;
-    }
-    button {
-      padding: 0.8em 1.2em;
-      font-size: 1em;
-      cursor: pointer;
-      border: none;
-      border-radius: 4px;
-      background: #4caf50;
-      color: #fff;
-      margin-bottom: 1em;
-    }
-    button:hover {
-      background: #45a049;
-    }
-    #pitchDisplay {
-      font-size: 1.2em;
-      font-weight: bold;
-      margin-bottom: 1em;
-    }
-    .meter-container {
-      margin: 1em 0;
-      max-width: 400px;
-    }
-    .meter-label {
-      margin-bottom: 0.2em;
-      font-size: 0.9em;
-      color: #666;
-    }
-    meter {
-      width: 100%;
-      height: 1.3em;
-    }
-    /* Basic color steps for meter if browser supports them */
-    meter::-webkit-meter-optimum-value {
-      background: limegreen;
-    }
-    meter::-webkit-meter-suboptimum-value {
-      background: gold;
-    }
-    meter::-webkit-meter-even-less-good-value {
-      background: red;
-    }
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Guitar Tuner</title>
+<style>
+  :root {
+    --bg: #14161a;
+    --panel: #1d2026;
+    --panel-edge: #2b2f37;
+    --cream: #ece5d8;
+    --cream-dim: #9a958a;
+    --amber: #f0a73c;
+    --green: #5ec26a;
+    --red: #e05c52;
+    --tick: #4a4f59;
+  }
 
-    /* New styling for string info */
-    #stringDetected {
-      font-size: 1.2em;
-      font-weight: bold;
-      margin: 0.5em 0;
-      color: #555;
-    }
-  </style>
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--cream);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1.5rem 1rem 3rem;
+  }
+
+  .faceplate {
+    width: 100%;
+    max-width: 560px;
+    background: var(--panel);
+    border: 1px solid var(--panel-edge);
+    border-radius: 14px;
+    padding: 1.5rem 1.5rem 2rem;
+    box-shadow: 0 18px 50px rgba(0,0,0,.45);
+  }
+
+  .legend {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 1px solid var(--panel-edge);
+    padding-bottom: .75rem;
+    margin-bottom: 1.25rem;
+  }
+  .legend h1 {
+    margin: 0;
+    font-size: .85rem;
+    font-weight: 600;
+    letter-spacing: .35em;
+    text-transform: uppercase;
+    color: var(--cream);
+  }
+  .legend span {
+    font-size: .7rem;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--cream-dim);
+  }
+
+  /* ---- Note display ---- */
+  .note-zone {
+    text-align: center;
+    min-height: 6.2rem;
+    margin-bottom: .25rem;
+  }
+  #noteName {
+    font-size: 4.6rem;
+    line-height: 1;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--cream);
+    transition: color .25s ease, text-shadow .25s ease;
+  }
+  #noteName sub {
+    font-size: 1.6rem;
+    font-weight: 500;
+    color: var(--cream-dim);
+  }
+  #noteName.in-tune {
+    color: var(--green);
+    text-shadow: 0 0 22px rgba(94,194,106,.45);
+  }
+  #noteName.off { color: var(--amber); }
+  #hzReadout {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .85rem;
+    color: var(--cream-dim);
+    margin-top: .35rem;
+    min-height: 1.1em;
+  }
+
+  /* ---- Gauge ---- */
+  .gauge-wrap { display: flex; justify-content: center; }
+  svg.gauge { width: 100%; max-width: 420px; height: auto; display: block; }
+  .gauge .tick { stroke: var(--tick); stroke-width: 2; }
+  .gauge .tick.major { stroke: var(--cream-dim); stroke-width: 2.5; }
+  .gauge .tick.center { stroke: var(--green); stroke-width: 3; }
+  .gauge text {
+    fill: var(--cream-dim);
+    font-size: 11px;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    text-anchor: middle;
+  }
+  #needle {
+    stroke: var(--amber);
+    stroke-width: 3.5;
+    stroke-linecap: round;
+    transform-origin: 210px 180px;
+    transition: transform .12s linear, stroke .25s ease;
+  }
+  #needle.in-tune { stroke: var(--green); }
+  #needleHub { fill: var(--panel-edge); stroke: var(--cream-dim); }
+  @media (prefers-reduced-motion: reduce) {
+    #needle { transition: none; }
+  }
+
+  /* ---- Direction hint ---- */
+  #hint {
+    text-align: center;
+    font-size: 1rem;
+    min-height: 1.5em;
+    margin: .5rem 0 1.5rem;
+    color: var(--cream-dim);
+  }
+  #hint.good { color: var(--green); font-weight: 600; }
+  #hint.act { color: var(--amber); }
+  #hint.error { color: var(--red); }
+
+  /* ---- String lamps ---- */
+  .strings {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: .5rem;
+    margin-bottom: 1.5rem;
+  }
+  .string-btn {
+    appearance: none;
+    background: var(--bg);
+    border: 1px solid var(--panel-edge);
+    border-radius: 10px;
+    color: var(--cream-dim);
+    font: inherit;
+    padding: .65rem 0 .5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, color .2s, box-shadow .2s;
+  }
+  .string-btn .n { display: block; font-size: 1.15rem; font-weight: 700; color: var(--cream); }
+  .string-btn .o { font-size: .7rem; }
+  .string-btn .dot {
+    display: block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--tick);
+    margin: .4rem auto 0;
+    transition: background .2s, box-shadow .2s;
+  }
+  .string-btn:hover { border-color: var(--cream-dim); }
+  .string-btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  .string-btn.active { border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber) inset; }
+  .string-btn.tuned .dot { background: var(--green); box-shadow: 0 0 8px rgba(94,194,106,.7); }
+  .strings-caption {
+    grid-column: 1 / -1;
+    font-size: .72rem;
+    color: var(--cream-dim);
+    text-align: center;
+    margin-top: .1rem;
+  }
+
+  /* ---- Power button ---- */
+  .controls { display: flex; justify-content: center; }
+  #powerBtn {
+    appearance: none;
+    font: inherit;
+    font-weight: 600;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    font-size: .85rem;
+    color: #1a1c20;
+    background: var(--amber);
+    border: none;
+    border-radius: 999px;
+    padding: .9rem 2.6rem;
+    cursor: pointer;
+    transition: background .2s, transform .1s;
+  }
+  #powerBtn:hover { background: #f7b95e; }
+  #powerBtn:active { transform: scale(.97); }
+  #powerBtn:focus-visible { outline: 2px solid var(--cream); outline-offset: 3px; }
+  #powerBtn.on { background: var(--panel-edge); color: var(--cream); }
+  #powerBtn.on:hover { background: #3a3f49; }
+
+  .help {
+    max-width: 560px;
+    width: 100%;
+    margin-top: 1.25rem;
+    font-size: .82rem;
+    color: var(--cream-dim);
+    line-height: 1.6;
+    text-align: center;
+  }
+</style>
 </head>
 <body>
-  <h1>Guitar Tuner</h1>
 
-  <div class="instructions">
-    <p><strong>How to use:</strong></p>
-    <ol>
-      <li>Click the <strong>Start Tuner</strong> button and allow microphone access.</li>
-      <li>Pluck one guitar string at a time (E, A, D, G, B, or E).</li>
-      <li>Check the <strong>Detected Pitch</strong> and <strong>Nearest String</strong> readouts.</li>
-      <li>If the tuning is good (±5 cents), you should see <span style="color: green;">green</span> text and hear a short beep every couple of seconds.</li>
-    </ol>
+<main class="faceplate">
+  <header class="legend">
+    <h1>Guitar Tuner</h1>
+    <span>Standard · E A D G B E</span>
+  </header>
+
+  <div class="note-zone" aria-live="polite">
+    <div id="noteName">—</div>
+    <div id="hzReadout"></div>
   </div>
 
-  <button id="startBtn">Start Tuner</button>
-  <!-- We’ll show which string was detected here -->
-  <div id="stringDetected">No string detected yet</div>
-
-  <div id="pitchDisplay">Not started</div>
-
-  <!-- Meter to show how many cents off we are from the nearest string -->
-  <div class="meter-container">
-    <div class="meter-label">Cents off (–50 to +50)</div>
-    <meter id="tuningMeter" min="-50" max="50" value="0" low="-10" high="10" optimum="0"></meter>
+  <div class="gauge-wrap" aria-hidden="true">
+    <svg class="gauge" viewBox="0 0 420 205">
+      <g id="ticks"></g>
+      <text x="60" y="120">-50</text>
+      <text x="108" y="68">-25</text>
+      <text x="210" y="42">0</text>
+      <text x="312" y="68">+25</text>
+      <text x="360" y="120">+50</text>
+      <text x="210" y="200" style="font-size:10px; letter-spacing:.2em;">CENTS</text>
+      <line id="needle" x1="210" y1="180" x2="210" y2="62" />
+      <circle id="needleHub" cx="210" cy="180" r="7" />
+    </svg>
   </div>
 
-  <script>
-    const startBtn = document.getElementById("startBtn");
-    const pitchDisplay = document.getElementById("pitchDisplay");
-    const tuningMeter = document.getElementById("tuningMeter");
-    const stringDetectedElem = document.getElementById("stringDetected");
+  <p id="hint">Press Start, then pluck one string at a time.</p>
 
-    let audioContext;
-    let micStream;
-    let source;
-    let processor;
+  <div class="strings" id="stringsRow" role="group" aria-label="Guitar strings"></div>
 
-    // Standard guitar strings (lowest to highest)
-    const guitarStrings = [
-      { note: "E2", freq: 82.41 },
-      { note: "A2", freq: 110.00 },
-      { note: "D3", freq: 146.83 },
-      { note: "G3", freq: 196.00 },
-      { note: "B3", freq: 246.94 },
-      { note: "E4", freq: 329.63 },
-    ];
+  <div class="controls">
+    <button id="powerBtn">Start tuner</button>
+  </div>
+</main>
 
-    // Tuning thresholds
-    const GREEN_THRESHOLD = 5;   // ±5 cents is "in tune"
-    const YELLOW_THRESHOLD = 10; // ±10 cents is "close"
-    const BUFFER_SIZE = 8192;    // larger for low freq detection
-    const YIN_THRESHOLD = 0.15;  // YIN param
-    const RMS_THRESHOLD = 0.01;  // skip quiet frames
-    const SMOOTHING_FRAMES = 5;  // average last few pitches
-    let pitchHistory = [];
+<p class="help">
+  Tap any string above to hear its reference pitch. A string turns
+  <strong style="color:var(--green)">green</strong> once you hold it in tune for a second.
+  Works best in a quiet room with your guitar close to the microphone.
+</p>
 
-    // For beep feedback
-    let lastBeepTime = 0;           // when we last beeped
-    const BEEP_DEBOUNCE_SECONDS = 2; // only beep at most once every 2s
-    // You can tweak beep frequency, duration, etc.
-    const BEEP_FREQUENCY = 880;      // A5 = 880 Hz
-    const BEEP_DURATION = 0.15;      // beep length in seconds
+<script>
+(() => {
+  "use strict";
 
-    startBtn.addEventListener("click", startTuner);
+  // ---------- Config ----------
+  const STRINGS = [
+    { note: "E", octave: 2, freq: 82.41 },
+    { note: "A", octave: 2, freq: 110.00 },
+    { note: "D", octave: 3, freq: 146.83 },
+    { note: "G", octave: 3, freq: 196.00 },
+    { note: "B", octave: 3, freq: 246.94 },
+    { note: "E", octave: 4, freq: 329.63 },
+  ];
+  const IN_TUNE_CENTS   = 5;      // ±5 cents counts as in tune
+  const FFT_SIZE        = 8192;
+  const YIN_THRESHOLD   = 0.15;
+  const RMS_THRESHOLD   = 0.008;
+  const SMOOTHING       = 5;      // median window
+  const HOLD_MS         = 900;    // keep last reading this long after sound stops
+  const TUNED_HOLD_MS   = 1000;   // stay in tune this long to mark string tuned
+  const BEEP_GAP_S      = 2;
+  const MIN_FREQ        = 60, MAX_FREQ = 500;
 
-    async function startTuner() {
-      if (audioContext) return; // if already started
+  // ---------- Elements ----------
+  const noteName   = document.getElementById("noteName");
+  const hzReadout  = document.getElementById("hzReadout");
+  const hint       = document.getElementById("hint");
+  const needle     = document.getElementById("needle");
+  const powerBtn   = document.getElementById("powerBtn");
+  const stringsRow = document.getElementById("stringsRow");
+  const ticksGroup = document.getElementById("ticks");
 
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  // ---------- Build gauge ticks ----------
+  (function drawTicks() {
+    const cx = 210, cy = 180, rOuter = 130, sweep = 120; // -60°..+60°
+    for (let c = -50; c <= 50; c += 5) {
+      const major = c % 25 === 0;
+      const a = (c / 50) * (sweep / 2) * Math.PI / 180;
+      const rInner = rOuter - (major ? 14 : 8);
+      const x1 = cx + Math.sin(a) * rInner, y1 = cy - Math.cos(a) * rInner;
+      const x2 = cx + Math.sin(a) * rOuter, y2 = cy - Math.cos(a) * rOuter;
+      const t = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      t.setAttribute("x1", x1); t.setAttribute("y1", y1);
+      t.setAttribute("x2", x2); t.setAttribute("y2", y2);
+      t.setAttribute("class", "tick" + (c === 0 ? " center" : major ? " major" : ""));
+      ticksGroup.appendChild(t);
+    }
+  })();
 
-      try {
-        // Request microphone input
-        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        source = audioContext.createMediaStreamSource(micStream);
+  // ---------- Build string buttons ----------
+  const stringBtns = STRINGS.map((s, i) => {
+    const b = document.createElement("button");
+    b.className = "string-btn";
+    b.type = "button";
+    b.setAttribute("aria-label", `Play reference tone for ${s.note}${s.octave}`);
+    b.innerHTML = `<span class="n">${s.note}<span class="o">${s.octave}</span></span><span class="dot"></span>`;
+    b.addEventListener("click", () => playReference(s.freq));
+    stringsRow.appendChild(b);
+    return b;
+  });
+  const caption = document.createElement("div");
+  caption.className = "strings-caption";
+  caption.textContent = "Tap a string to hear its target pitch";
+  stringsRow.appendChild(caption);
 
-        // Create ScriptProcessorNode for real-time audio processing
-        processor = audioContext.createScriptProcessor(BUFFER_SIZE, 1, 1);
+  // ---------- Audio state ----------
+  let audioCtx = null, micStream = null, analyser = null, rafId = null;
+  let running = false;
+  let pitchHistory = [];
+  let lastGoodTime = 0;
+  let lastBeepTime = 0;
+  let inTuneSince = null;
+  let activeStringIndex = -1;
 
-        processor.onaudioprocess = (event) => {
-          const inputBuffer = event.inputBuffer.getChannelData(0);
-          const rms = calculateRMS(inputBuffer);
+  powerBtn.addEventListener("click", () => running ? stopTuner() : startTuner());
 
-          if (rms < RMS_THRESHOLD) {
-            pitchDisplay.textContent = "No strong pitch detected (too quiet)";
-            pitchDisplay.style.color = "black";
-            stringDetectedElem.textContent = "No string detected yet";
-            tuningMeter.value = 0;
-            return;
-          }
+  async function startTuner() {
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") await audioCtx.resume();
 
-          const rawFrequency = yinPitchDetector(inputBuffer, audioContext.sampleRate, YIN_THRESHOLD);
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+      });
+      const source = audioCtx.createMediaStreamSource(micStream);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = FFT_SIZE;
+      source.connect(analyser);
 
-          if (rawFrequency > 0) {
-            // Smooth the pitch
-            pitchHistory.push(rawFrequency);
-            if (pitchHistory.length > SMOOTHING_FRAMES) {
-              pitchHistory.shift();
-            }
-            const frequency = averageArray(pitchHistory);
-
-            // Nearest string
-            const nearestString = findNearestString(frequency);
-            stringDetectedElem.textContent = `String Detected: ${nearestString.note}`;
-
-            // Cents off
-            const diffCents = 1200 * Math.log2(frequency / nearestString.freq);
-
-            // Show info
-            pitchDisplay.textContent =
-              `Detected: ${frequency.toFixed(2)} Hz | ` +
-              `Nearest: ${nearestString.note} (${nearestString.freq.toFixed(2)} Hz) | ` +
-              `Off by: ${diffCents.toFixed(2)} cents`;
-
-            // Meter
-            let meterValue = Math.max(-50, Math.min(50, diffCents));
-            tuningMeter.value = meterValue;
-
-            // Color and beep
-            const absDiff = Math.abs(diffCents);
-            if (absDiff <= GREEN_THRESHOLD) {
-              pitchDisplay.style.color = "green";
-              // Trigger beep if enough time has passed
-              const now = audioContext.currentTime;
-              if (now - lastBeepTime > BEEP_DEBOUNCE_SECONDS) {
-                playBeep();
-                lastBeepTime = now;
-              }
-            } else if (absDiff <= YELLOW_THRESHOLD) {
-              pitchDisplay.style.color = "goldenrod";
-            } else {
-              pitchDisplay.style.color = "red";
-            }
-          } else {
-            pitchDisplay.textContent = "No strong pitch detected";
-            pitchDisplay.style.color = "black";
-            stringDetectedElem.textContent = "No string detected yet";
-            tuningMeter.value = 0;
-          }
-        };
-
-        source.connect(processor);
-        processor.connect(audioContext.destination);
-
-        pitchDisplay.textContent = "Tuner started. Pluck one string at a time...";
-      } catch (err) {
-        console.error(err);
-        pitchDisplay.textContent = "Microphone access denied or unavailable.";
-        pitchDisplay.style.color = "red";
+      running = true;
+      powerBtn.textContent = "Stop tuner";
+      powerBtn.classList.add("on");
+      setHint("Listening… pluck one string at a time.", "");
+      loop();
+    } catch (err) {
+      if (err && (err.name === "NotAllowedError" || err.name === "SecurityError")) {
+        setHint("Microphone access is blocked. Allow it in your browser's site settings, then press Start again.", "error");
+      } else if (err && err.name === "NotFoundError") {
+        setHint("No microphone found. Plug one in or check your input device, then press Start again.", "error");
+      } else {
+        setHint("Couldn't start the microphone. Check your audio settings and try again.", "error");
       }
     }
+  }
 
-    function playBeep() {
-      // Create a short beep using an oscillator
-      const beepContext = new AudioContext();
-      const oscillator = beepContext.createOscillator();
-      oscillator.type = "sine";
-      oscillator.frequency.value = BEEP_FREQUENCY;
-      oscillator.connect(beepContext.destination);
-      oscillator.start();
-      oscillator.stop(beepContext.currentTime + BEEP_DURATION);
+  function stopTuner() {
+    running = false;
+    if (rafId) cancelAnimationFrame(rafId);
+    if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+    analyser = null;
+    pitchHistory = [];
+    inTuneSince = null;
+    setActiveString(-1);
+    powerBtn.textContent = "Start tuner";
+    powerBtn.classList.remove("on");
+    noteName.textContent = "—";
+    noteName.className = "";
+    hzReadout.textContent = "";
+    setNeedle(0, false);
+    setHint("Tuner stopped. Press Start to tune again.", "");
+  }
+
+  // ---------- Detection loop ----------
+  const timeBuf = new Float32Array(FFT_SIZE);
+
+  function loop() {
+    if (!running) return;
+    rafId = requestAnimationFrame(loop);
+
+    analyser.getFloatTimeDomainData(timeBuf);
+    const rms = calcRMS(timeBuf);
+    const now = performance.now();
+
+    if (rms < RMS_THRESHOLD) {
+      if (now - lastGoodTime > HOLD_MS) goIdle();
+      return;
     }
 
-    function calculateRMS(buffer) {
+    const f = yin(timeBuf, audioCtx.sampleRate);
+    if (f < MIN_FREQ || f > MAX_FREQ) {
+      if (now - lastGoodTime > HOLD_MS) goIdle();
+      return;
+    }
+
+    lastGoodTime = now;
+    pitchHistory.push(f);
+    if (pitchHistory.length > SMOOTHING) pitchHistory.shift();
+    const freq = median(pitchHistory);
+
+    const target = nearestString(freq);
+    const cents = 1200 * Math.log2(freq / target.freq);
+    render(freq, target, cents, now);
+  }
+
+  function goIdle() {
+    pitchHistory = [];
+    inTuneSince = null;
+    noteName.textContent = "—";
+    noteName.className = "";
+    hzReadout.textContent = "";
+    setNeedle(0, false);
+    setActiveString(-1);
+    setHint("Listening… pluck one string at a time.", "");
+  }
+
+  function render(freq, target, cents, now) {
+    const idx = STRINGS.indexOf(target);
+    const inTune = Math.abs(cents) <= IN_TUNE_CENTS;
+
+    noteName.innerHTML = `${target.note}<sub>${target.octave}</sub>`;
+    noteName.className = inTune ? "in-tune" : "off";
+    hzReadout.textContent = `${freq.toFixed(1)} Hz · target ${target.freq.toFixed(1)} Hz · ${cents >= 0 ? "+" : ""}${cents.toFixed(0)} cents`;
+    setNeedle(cents, inTune);
+    setActiveString(idx);
+
+    if (inTune) {
+      setHint("In tune ✓", "good");
+      if (inTuneSince === null) inTuneSince = now;
+      if (now - inTuneSince >= TUNED_HOLD_MS) stringBtns[idx].classList.add("tuned");
+      if (audioCtx.currentTime - lastBeepTime > BEEP_GAP_S) {
+        beep();
+        lastBeepTime = audioCtx.currentTime;
+      }
+    } else {
+      inTuneSince = null;
+      setHint(cents < 0 ? "Too low — tighten the string ↑" : "Too high — loosen the string ↓", "act");
+    }
+  }
+
+  // ---------- UI helpers ----------
+  function setHint(text, cls) { hint.textContent = text; hint.className = cls; }
+
+  function setNeedle(cents, inTune) {
+    const clamped = Math.max(-50, Math.min(50, cents));
+    needle.style.transform = `rotate(${(clamped / 50) * 60}deg)`;
+    needle.classList.toggle("in-tune", inTune);
+  }
+
+  function setActiveString(idx) {
+    if (idx === activeStringIndex) return;
+    activeStringIndex = idx;
+    stringBtns.forEach((b, i) => b.classList.toggle("active", i === idx));
+  }
+
+  // ---------- Sounds ----------
+  function ensureCtx() {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    return audioCtx;
+  }
+
+  function beep() {
+    const ctx = ensureCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.15);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.16);
+  }
+
+  function playReference(freq) {
+    const ctx = ensureCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "triangle"; // a little warmer than sine
+    osc.frequency.value = freq;
+    const t = ctx.currentTime;
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.25, t + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.8);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 1.85);
+  }
+
+  // ---------- Math / DSP ----------
+  function calcRMS(buf) {
+    let sum = 0;
+    for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+    return Math.sqrt(sum / buf.length);
+  }
+
+  function median(arr) {
+    const s = [...arr].sort((a, b) => a - b);
+    const m = s.length >> 1;
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  }
+
+  // Nearest string by pitch distance in cents (octave-fair), not raw Hz
+  function nearestString(freq) {
+    let best = STRINGS[0], bestDist = Infinity;
+    for (const s of STRINGS) {
+      const d = Math.abs(Math.log2(freq / s.freq));
+      if (d < bestDist) { bestDist = d; best = s; }
+    }
+    return best;
+  }
+
+  // YIN pitch detection, search limited to the guitar range for speed
+  function yin(buf, sampleRate) {
+    const tauMin = Math.floor(sampleRate / MAX_FREQ);
+    const tauMax = Math.min(Math.floor(sampleRate / MIN_FREQ), buf.length >> 1);
+    const yinBuf = new Float32Array(tauMax);
+
+    for (let t = tauMin; t < tauMax; t++) {
       let sum = 0;
-      for (let i = 0; i < buffer.length; i++) {
-        const val = buffer[i];
-        sum += val * val;
+      for (let i = 0; i < tauMax; i++) {
+        const d = buf[i] - buf[i + t];
+        sum += d * d;
       }
-      return Math.sqrt(sum / buffer.length);
+      yinBuf[t] = sum;
     }
 
-    function averageArray(arr) {
-      const sum = arr.reduce((acc, val) => acc + val, 0);
-      return sum / arr.length;
+    let runningSum = 0, tau = -1;
+    for (let t = tauMin; t < tauMax; t++) {
+      runningSum += yinBuf[t];
+      yinBuf[t] = runningSum === 0 ? 1 : yinBuf[t] * (t - tauMin + 1) / runningSum;
+      if (yinBuf[t] < YIN_THRESHOLD) {
+        while (t + 1 < tauMax && yinBuf[t + 1] < yinBuf[t]) t++;
+        tau = t;
+        break;
+      }
     }
+    if (tau <= 0) return -1;
 
-    function findNearestString(detectedFreq) {
-      let minDiff = Infinity;
-      let nearest = null;
-      for (const str of guitarStrings) {
-        const diff = Math.abs(detectedFreq - str.freq);
-        if (diff < minDiff) {
-          minDiff = diff;
-          nearest = str;
-        }
-      }
-      return nearest;
-    }
-
-    /**
-     * YIN Pitch Detection Algorithm (with adjustable threshold)
-     * Returns the detected pitch in Hz, or -1 if no pitch is detected.
-     */
-    function yinPitchDetector(buffer, sampleRate, threshold) {
-      const halfBufferSize = buffer.length >> 1;
-      let runningSum = 0;
-      let tau = 0;
-
-      // Step 1: Difference function
-      const yinBuffer = new Float32Array(halfBufferSize);
-      for (let t = 0; t < halfBufferSize; t++) {
-        let sum = 0;
-        for (let i = 0; i < halfBufferSize; i++) {
-          const delta = buffer[i] - buffer[i + t];
-          sum += delta * delta;
-        }
-        yinBuffer[t] = sum;
-      }
-
-      // Step 2: Cumulative mean normalized difference
-      yinBuffer[0] = 1;
-      let minVal = Number.MAX_VALUE;
-      let minPos = 0;
-
-      for (let t = 1; t < halfBufferSize; t++) {
-        runningSum += yinBuffer[t];
-        yinBuffer[t] = yinBuffer[t] * t / runningSum;
-
-        if (yinBuffer[t] < minVal) {
-          minVal = yinBuffer[t];
-          minPos = t;
-        }
-        // Step 3: Absolute threshold
-        if (yinBuffer[t] < threshold) {
-          while (t + 1 < halfBufferSize && yinBuffer[t + 1] < yinBuffer[t]) {
-            t++;
-          }
-          tau = t;
-          break;
-        }
-      }
-
-      if (tau === 0) {
-        return -1;
-      }
-
-      // Step 4: Parabolic interpolation
-      const x0 = (tau < 1) ? tau : tau - 1;
-      const x2 = (tau + 1 < halfBufferSize) ? tau + 1 : tau;
-      if (x0 === tau || x2 === tau) {
-        return sampleRate / tau;
-      }
-      const s0 = yinBuffer[x0];
-      const s1 = yinBuffer[tau];
-      const s2 = yinBuffer[x2];
-      const betterTau = tau + (s2 - s0) / (2 * (2 * s1 - s2 - s0));
-
-      return sampleRate / betterTau;
-    }
-  </script>
+    // Parabolic interpolation for sub-sample accuracy
+    const x0 = tau > tauMin ? tau - 1 : tau;
+    const x2 = tau + 1 < tauMax ? tau + 1 : tau;
+    if (x0 === tau || x2 === tau) return sampleRate / tau;
+    const s0 = yinBuf[x0], s1 = yinBuf[tau], s2 = yinBuf[x2];
+    const denom = 2 * (2 * s1 - s2 - s0);
+    const betterTau = denom === 0 ? tau : tau + (s2 - s0) / denom;
+    return sampleRate / betterTau;
+  }
+})();
+</script>
 </body>
 </html>
