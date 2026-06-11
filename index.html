@@ -45,9 +45,11 @@
     display: flex;
     justify-content: space-between;
     align-items: baseline;
+    flex-wrap: wrap;
+    gap: .25rem .75rem;
     border-bottom: 1px solid var(--panel-edge);
     padding-bottom: .75rem;
-    margin-bottom: 1.25rem;
+    margin-bottom: 1rem;
   }
   .legend h1 {
     margin: 0;
@@ -64,11 +66,97 @@
     color: var(--cream-dim);
   }
 
+  /* ---- Settings bar ---- */
+  .settings {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .75rem 1.25rem;
+    margin-bottom: 1.25rem;
+  }
+  .set { display: flex; flex-direction: column; gap: .3rem; }
+  .set-label {
+    font-size: .62rem;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--cream-dim);
+  }
+  select#tuningSelect {
+    font: inherit;
+    font-size: .85rem;
+    color: var(--cream);
+    background: var(--bg);
+    border: 1px solid var(--panel-edge);
+    border-radius: 8px;
+    padding: .42rem .55rem;
+    cursor: pointer;
+  }
+  select#tuningSelect:focus-visible,
+  .seg-btn:focus-visible,
+  .stepper button:focus-visible {
+    outline: 2px solid var(--amber);
+    outline-offset: 2px;
+  }
+  .seg { display: flex; gap: .35rem; }
+  .seg-btn {
+    appearance: none;
+    font: inherit;
+    font-size: .8rem;
+    color: var(--cream-dim);
+    background: var(--bg);
+    border: 1px solid var(--panel-edge);
+    border-radius: 8px;
+    padding: .42rem .7rem;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+  }
+  .seg-btn:hover { border-color: var(--cream-dim); }
+  .seg-btn.on {
+    background: var(--amber);
+    border-color: var(--amber);
+    color: #1a1c20;
+    font-weight: 600;
+  }
+  .stepper { display: flex; align-items: center; gap: .4rem; }
+  .stepper button {
+    appearance: none;
+    font: inherit;
+    font-size: 1rem;
+    line-height: 1;
+    color: var(--cream);
+    background: var(--bg);
+    border: 1px solid var(--panel-edge);
+    border-radius: 8px;
+    width: 1.9rem;
+    height: 1.9rem;
+    cursor: pointer;
+    transition: border-color .15s;
+  }
+  .stepper button:hover { border-color: var(--cream-dim); }
+  .stepper button:disabled { opacity: .35; cursor: default; }
+  #a4Value {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .85rem;
+    min-width: 4.2em;
+    text-align: center;
+  }
+
   /* ---- Note display ---- */
   .note-zone {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
     text-align: center;
     min-height: 6.2rem;
     margin-bottom: .25rem;
+  }
+  .idle-dash {
+    display: inline-block;
+    width: 2.6rem;
+    height: .35rem;
+    border-radius: 999px;
+    background: var(--tick);
+    vertical-align: middle;
   }
   #noteName {
     font-size: 4.6rem;
@@ -138,7 +226,6 @@
     display: grid;
     grid-template-columns: repeat(6, 1fr);
     gap: .5rem;
-    margin-bottom: 1.5rem;
   }
   .string-btn {
     appearance: none;
@@ -164,14 +251,18 @@
   }
   .string-btn:hover { border-color: var(--cream-dim); }
   .string-btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
-  .string-btn.active { border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber) inset; }
+  .string-btn.active { border-color: var(--cream-dim); box-shadow: 0 0 0 1px var(--cream-dim) inset; }
+  .string-btn.locked {
+    border-color: var(--amber);
+    box-shadow: 0 0 0 1px var(--amber) inset, 0 0 12px rgba(240,167,60,.3);
+  }
   .string-btn.tuned .dot { background: var(--green); box-shadow: 0 0 8px rgba(94,194,106,.7); }
   .strings-caption {
-    grid-column: 1 / -1;
     font-size: .72rem;
     color: var(--cream-dim);
     text-align: center;
-    margin-top: .1rem;
+    margin: .6rem 0 1.5rem;
+    min-height: 1.2em;
   }
 
   /* ---- Power button ---- */
@@ -206,6 +297,11 @@
     line-height: 1.6;
     text-align: center;
   }
+
+  @media (max-width: 480px) {
+    .faceplate { padding: 1.25rem 1rem 1.5rem; }
+    #noteName { font-size: 3.8rem; }
+  }
 </style>
 </head>
 <body>
@@ -213,11 +309,40 @@
 <main class="faceplate">
   <header class="legend">
     <h1>Guitar Tuner</h1>
-    <span>Standard · E A D G B E</span>
+    <span id="tuningLegend">Standard · E A D G B E</span>
   </header>
 
+  <div class="settings">
+    <label class="set">
+      <span class="set-label">Tuning</span>
+      <select id="tuningSelect"></select>
+    </label>
+
+    <div class="set">
+      <span class="set-label">Mode</span>
+      <div class="seg" role="group" aria-label="Detection mode">
+        <button type="button" id="modeStrings" class="seg-btn on" aria-pressed="true">Strings</button>
+        <button type="button" id="modeChromatic" class="seg-btn" aria-pressed="false">Chromatic</button>
+      </div>
+    </div>
+
+    <div class="set">
+      <span class="set-label">Reference A4</span>
+      <div class="stepper">
+        <button type="button" id="a4Down" aria-label="Lower reference pitch">&minus;</button>
+        <span id="a4Value" aria-live="polite">440 Hz</span>
+        <button type="button" id="a4Up" aria-label="Raise reference pitch">+</button>
+      </div>
+    </div>
+
+    <div class="set">
+      <span class="set-label">Beep</span>
+      <button type="button" id="beepToggle" class="seg-btn on" aria-pressed="true">On</button>
+    </div>
+  </div>
+
   <div class="note-zone" aria-live="polite">
-    <div id="noteName">—</div>
+    <div id="noteName"><span class="idle-dash" aria-hidden="true"></span></div>
     <div id="hzReadout"></div>
   </div>
 
@@ -238,6 +363,7 @@
   <p id="hint">Press Start, then pluck one string at a time.</p>
 
   <div class="strings" id="stringsRow" role="group" aria-label="Guitar strings"></div>
+  <div class="strings-caption" id="stringsCaption"></div>
 
   <div class="controls">
     <button id="powerBtn">Start tuner</button>
@@ -245,7 +371,8 @@
 </main>
 
 <p class="help">
-  Tap any string above to hear its reference pitch. A string turns
+  Tap a string to hear its reference pitch and lock onto it — useful when a string is far
+  enough off that auto-detect matches the wrong one. A string turns
   <strong style="color:var(--green)">green</strong> once you hold it in tune for a second.
   Works best in a quiet room with your guitar close to the microphone.
 </p>
@@ -255,14 +382,17 @@
   "use strict";
 
   // ---------- Config ----------
-  const STRINGS = [
-    { note: "E", octave: 2, freq: 82.41 },
-    { note: "A", octave: 2, freq: 110.00 },
-    { note: "D", octave: 3, freq: 146.83 },
-    { note: "G", octave: 3, freq: 196.00 },
-    { note: "B", octave: 3, freq: 246.94 },
-    { note: "E", octave: 4, freq: 329.63 },
-  ];
+  // Tunings as MIDI note numbers, low string to high.
+  const TUNINGS = {
+    standard: { label: "Standard",                midi: [40, 45, 50, 55, 59, 64] }, // E A D G B E
+    dropd:    { label: "Drop D",                  midi: [38, 45, 50, 55, 59, 64] }, // D A D G B E
+    eflat:    { label: "E\u266D Standard (\u00BD step down)", midi: [39, 44, 49, 54, 58, 63] },
+    dadgad:   { label: "DADGAD",                  midi: [38, 45, 50, 55, 57, 62] },
+    openg:    { label: "Open G",                  midi: [38, 43, 50, 55, 59, 62] }, // D G D G B D
+    opend:    { label: "Open D",                  midi: [38, 45, 50, 54, 57, 62] }, // D A D F# A D
+  };
+  const NOTE_NAMES = ["C", "C\u266F", "D", "D\u266F", "E", "F", "F\u266F", "G", "G\u266F", "A", "A\u266F", "B"];
+
   const IN_TUNE_CENTS   = 5;      // ±5 cents counts as in tune
   const FFT_SIZE        = 8192;
   const YIN_THRESHOLD   = 0.15;
@@ -271,16 +401,42 @@
   const HOLD_MS         = 900;    // keep last reading this long after sound stops
   const TUNED_HOLD_MS   = 1000;   // stay in tune this long to mark string tuned
   const BEEP_GAP_S      = 2;
-  const MIN_FREQ        = 60, MAX_FREQ = 500;
+  const DETECT_GAP_MS   = 30;     // run pitch detection at most every 30 ms
+  const A4_MIN = 432, A4_MAX = 446;
+
+  // ---------- State ----------
+  let tuningKey = "standard";
+  let mode = "strings";           // "strings" | "chromatic"
+  let a4 = 440;
+  let beepOn = true;
+  let lockedIndex = -1;           // -1 = auto-detect
+
+  let audioCtx = null, micStream = null, analyser = null, rafId = null;
+  let wakeLock = null;
+  let running = false;
+  let pitchHistory = [];
+  let lastGoodTime = 0;
+  let lastBeepTime = 0;
+  let lastDetectTime = 0;
+  let inTuneSince = null;
+  let activeStringIndex = -1;
 
   // ---------- Elements ----------
-  const noteName   = document.getElementById("noteName");
-  const hzReadout  = document.getElementById("hzReadout");
-  const hint       = document.getElementById("hint");
-  const needle     = document.getElementById("needle");
-  const powerBtn   = document.getElementById("powerBtn");
-  const stringsRow = document.getElementById("stringsRow");
-  const ticksGroup = document.getElementById("ticks");
+  const $ = (id) => document.getElementById(id);
+  const noteName = $("noteName"), hzReadout = $("hzReadout"), hint = $("hint");
+  const needle = $("needle"), powerBtn = $("powerBtn");
+  const stringsRow = $("stringsRow"), stringsCaption = $("stringsCaption");
+  const ticksGroup = $("ticks"), tuningLegend = $("tuningLegend");
+  const tuningSelect = $("tuningSelect");
+  const modeStringsBtn = $("modeStrings"), modeChromaticBtn = $("modeChromatic");
+  const a4Down = $("a4Down"), a4Up = $("a4Up"), a4Value = $("a4Value");
+  const beepToggle = $("beepToggle");
+
+  // ---------- Note math ----------
+  const freqOfMidi = (m) => a4 * Math.pow(2, (m - 69) / 12);
+  const noteParts = (m) => ({ name: NOTE_NAMES[((m % 12) + 12) % 12], octave: Math.floor(m / 12) - 1 });
+  const currentStrings = () =>
+    TUNINGS[tuningKey].midi.map((m) => ({ midi: m, freq: freqOfMidi(m), ...noteParts(m) }));
 
   // ---------- Build gauge ticks ----------
   (function drawTicks() {
@@ -299,32 +455,112 @@
     }
   })();
 
-  // ---------- Build string buttons ----------
-  const stringBtns = STRINGS.map((s, i) => {
-    const b = document.createElement("button");
-    b.className = "string-btn";
-    b.type = "button";
-    b.setAttribute("aria-label", `Play reference tone for ${s.note}${s.octave}`);
-    b.innerHTML = `<span class="n">${s.note}<span class="o">${s.octave}</span></span><span class="dot"></span>`;
-    b.addEventListener("click", () => playReference(s.freq));
-    stringsRow.appendChild(b);
-    return b;
+  // ---------- Build tuning select ----------
+  for (const [key, t] of Object.entries(TUNINGS)) {
+    const opt = document.createElement("option");
+    opt.value = key;
+    opt.textContent = t.label;
+    tuningSelect.appendChild(opt);
+  }
+  tuningSelect.value = tuningKey;
+
+  // ---------- String buttons ----------
+  let stringBtns = [];
+
+  function buildStrings() {
+    stringsRow.innerHTML = "";
+    stringBtns = currentStrings().map((s, i) => {
+      const b = document.createElement("button");
+      b.className = "string-btn";
+      b.type = "button";
+      b.setAttribute("aria-label", `String ${i + 1}: ${s.name}${s.octave}. Tap to hear it${mode === "strings" ? " and lock onto it" : ""}.`);
+      b.innerHTML = `<span class="n">${s.name}<span class="o">${s.octave}</span></span><span class="dot"></span>`;
+      b.addEventListener("click", () => onStringTap(i));
+      stringsRow.appendChild(b);
+      return b;
+    });
+    activeStringIndex = -1;
+    updateLegend();
+    updateCaption();
+  }
+
+  function onStringTap(i) {
+    const s = currentStrings()[i];
+    playReference(s.freq);
+    if (mode === "strings") {
+      lockedIndex = (lockedIndex === i) ? -1 : i;
+      inTuneSince = null;
+      stringBtns.forEach((b, j) => b.classList.toggle("locked", j === lockedIndex));
+      updateCaption();
+      if (running) setIdleHint();
+    }
+  }
+
+  function updateLegend() {
+    const notes = currentStrings().map((s) => s.name).join(" ");
+    tuningLegend.textContent = `${TUNINGS[tuningKey].label} \u00B7 ${notes}`;
+  }
+
+  function updateCaption() {
+    if (mode === "chromatic") {
+      stringsCaption.textContent = "Chromatic mode — any note is detected. Tap a string to hear its pitch.";
+    } else if (lockedIndex >= 0) {
+      const s = currentStrings()[lockedIndex];
+      stringsCaption.textContent = `Locked to ${s.name}${s.octave} — tap it again to unlock.`;
+    } else {
+      stringsCaption.textContent = "Tap a string to hear its pitch and lock onto it.";
+    }
+  }
+
+  function clearTunedDots() {
+    stringBtns.forEach((b) => b.classList.remove("tuned"));
+  }
+
+  // ---------- Settings events ----------
+  tuningSelect.addEventListener("change", () => {
+    tuningKey = tuningSelect.value;
+    lockedIndex = -1;
+    inTuneSince = null;
+    buildStrings();
+    if (running) setIdleHint();
   });
-  const caption = document.createElement("div");
-  caption.className = "strings-caption";
-  caption.textContent = "Tap a string to hear its target pitch";
-  stringsRow.appendChild(caption);
 
-  // ---------- Audio state ----------
-  let audioCtx = null, micStream = null, analyser = null, rafId = null;
-  let running = false;
-  let pitchHistory = [];
-  let lastGoodTime = 0;
-  let lastBeepTime = 0;
-  let inTuneSince = null;
-  let activeStringIndex = -1;
+  function setMode(next) {
+    if (mode === next) return;
+    mode = next;
+    lockedIndex = -1;
+    inTuneSince = null;
+    modeStringsBtn.classList.toggle("on", mode === "strings");
+    modeStringsBtn.setAttribute("aria-pressed", String(mode === "strings"));
+    modeChromaticBtn.classList.toggle("on", mode === "chromatic");
+    modeChromaticBtn.setAttribute("aria-pressed", String(mode === "chromatic"));
+    buildStrings();
+    if (running) setIdleHint();
+  }
+  modeStringsBtn.addEventListener("click", () => setMode("strings"));
+  modeChromaticBtn.addEventListener("click", () => setMode("chromatic"));
 
-  powerBtn.addEventListener("click", () => running ? stopTuner() : startTuner());
+  function setA4(next) {
+    a4 = Math.max(A4_MIN, Math.min(A4_MAX, next));
+    a4Value.textContent = `${a4} Hz`;
+    a4Down.disabled = a4 <= A4_MIN;
+    a4Up.disabled = a4 >= A4_MAX;
+    inTuneSince = null;
+    clearTunedDots();
+    buildStrings();
+  }
+  a4Down.addEventListener("click", () => setA4(a4 - 1));
+  a4Up.addEventListener("click", () => setA4(a4 + 1));
+
+  beepToggle.addEventListener("click", () => {
+    beepOn = !beepOn;
+    beepToggle.textContent = beepOn ? "On" : "Off";
+    beepToggle.classList.toggle("on", beepOn);
+    beepToggle.setAttribute("aria-pressed", String(beepOn));
+  });
+
+  // ---------- Start / stop ----------
+  powerBtn.addEventListener("click", () => (running ? stopTuner() : startTuner()));
 
   async function startTuner() {
     try {
@@ -342,7 +578,8 @@
       running = true;
       powerBtn.textContent = "Stop tuner";
       powerBtn.classList.add("on");
-      setHint("Listening… pluck one string at a time.", "");
+      setIdleHint();
+      requestWakeLock();
       loop();
     } catch (err) {
       if (err && (err.name === "NotAllowedError" || err.name === "SecurityError")) {
@@ -358,38 +595,61 @@
   function stopTuner() {
     running = false;
     if (rafId) cancelAnimationFrame(rafId);
-    if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+    if (micStream) { micStream.getTracks().forEach((t) => t.stop()); micStream = null; }
     analyser = null;
     pitchHistory = [];
     inTuneSince = null;
+    releaseWakeLock();
     setActiveString(-1);
     powerBtn.textContent = "Start tuner";
     powerBtn.classList.remove("on");
-    noteName.textContent = "—";
-    noteName.className = "";
-    hzReadout.textContent = "";
+    showIdleNote();
     setNeedle(0, false);
     setHint("Tuner stopped. Press Start to tune again.", "");
   }
 
+  // ---------- Wake lock (keep the screen on while tuning) ----------
+  async function requestWakeLock() {
+    if (!("wakeLock" in navigator)) return;
+    try {
+      wakeLock = await navigator.wakeLock.request("screen");
+    } catch (e) { /* not critical — e.g. low battery mode */ }
+  }
+  function releaseWakeLock() {
+    if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (running && document.visibilityState === "visible") requestWakeLock();
+  });
+
   // ---------- Detection loop ----------
   const timeBuf = new Float32Array(FFT_SIZE);
+
+  function detectionBounds() {
+    if (mode === "chromatic") return [50, 1000];
+    const ss = currentStrings();
+    return [ss[0].freq * 0.7, ss[ss.length - 1].freq * 1.35];
+  }
 
   function loop() {
     if (!running) return;
     rafId = requestAnimationFrame(loop);
 
+    const now = performance.now();
+    if (now - lastDetectTime < DETECT_GAP_MS) return;
+    lastDetectTime = now;
+
     analyser.getFloatTimeDomainData(timeBuf);
     const rms = calcRMS(timeBuf);
-    const now = performance.now();
 
     if (rms < RMS_THRESHOLD) {
       if (now - lastGoodTime > HOLD_MS) goIdle();
       return;
     }
 
-    const f = yin(timeBuf, audioCtx.sampleRate);
-    if (f < MIN_FREQ || f > MAX_FREQ) {
+    const [minF, maxF] = detectionBounds();
+    const f = yin(timeBuf, audioCtx.sampleRate, minF, maxF);
+    if (f < minF || f > maxF) {
       if (now - lastGoodTime > HOLD_MS) goIdle();
       return;
     }
@@ -399,43 +659,76 @@
     if (pitchHistory.length > SMOOTHING) pitchHistory.shift();
     const freq = median(pitchHistory);
 
-    const target = nearestString(freq);
+    const target = getTarget(freq);
     const cents = 1200 * Math.log2(freq / target.freq);
     render(freq, target, cents, now);
+  }
+
+  // Pick what we are tuning toward.
+  function getTarget(freq) {
+    const strings = currentStrings();
+    if (mode === "strings") {
+      if (lockedIndex >= 0) return { ...strings[lockedIndex], stringIndex: lockedIndex };
+      let bi = 0, bd = Infinity;
+      strings.forEach((s, i) => {
+        const d = Math.abs(Math.log2(freq / s.freq)); // octave-fair distance
+        if (d < bd) { bd = d; bi = i; }
+      });
+      return { ...strings[bi], stringIndex: bi };
+    }
+    // Chromatic: nearest semitone at the current reference pitch
+    const midi = Math.max(0, Math.min(127, Math.round(69 + 12 * Math.log2(freq / a4))));
+    const stringIndex = strings.findIndex((s) => s.midi === midi);
+    return { midi, freq: freqOfMidi(midi), ...noteParts(midi), stringIndex };
   }
 
   function goIdle() {
     pitchHistory = [];
     inTuneSince = null;
-    noteName.textContent = "—";
-    noteName.className = "";
+    showIdleNote();
     hzReadout.textContent = "";
     setNeedle(0, false);
-    setActiveString(-1);
-    setHint("Listening… pluck one string at a time.", "");
+    setActiveString(lockedIndex);
+    setIdleHint();
+  }
+
+  function showIdleNote() {
+    noteName.innerHTML = '<span class="idle-dash" aria-hidden="true"></span>';
+    noteName.className = "";
+  }
+
+  function setIdleHint() {
+    if (mode === "strings" && lockedIndex >= 0) {
+      const s = currentStrings()[lockedIndex];
+      setHint(`Listening for ${s.name}${s.octave}\u2026`, "");
+    } else {
+      setHint("Listening\u2026 pluck one string at a time.", "");
+    }
   }
 
   function render(freq, target, cents, now) {
-    const idx = STRINGS.indexOf(target);
     const inTune = Math.abs(cents) <= IN_TUNE_CENTS;
 
-    noteName.innerHTML = `${target.note}<sub>${target.octave}</sub>`;
+    noteName.innerHTML = `${target.name}<sub>${target.octave}</sub>`;
     noteName.className = inTune ? "in-tune" : "off";
-    hzReadout.textContent = `${freq.toFixed(1)} Hz · target ${target.freq.toFixed(1)} Hz · ${cents >= 0 ? "+" : ""}${cents.toFixed(0)} cents`;
+    hzReadout.textContent =
+      `${freq.toFixed(1)} Hz \u00B7 target ${target.freq.toFixed(1)} Hz \u00B7 ${cents >= 0 ? "+" : ""}${cents.toFixed(0)} cents`;
     setNeedle(cents, inTune);
-    setActiveString(idx);
+    setActiveString(target.stringIndex);
 
     if (inTune) {
-      setHint("In tune ✓", "good");
+      setHint("In tune \u2713", "good");
       if (inTuneSince === null) inTuneSince = now;
-      if (now - inTuneSince >= TUNED_HOLD_MS) stringBtns[idx].classList.add("tuned");
-      if (audioCtx.currentTime - lastBeepTime > BEEP_GAP_S) {
+      if (now - inTuneSince >= TUNED_HOLD_MS && target.stringIndex >= 0) {
+        stringBtns[target.stringIndex].classList.add("tuned");
+      }
+      if (beepOn && audioCtx.currentTime - lastBeepTime > BEEP_GAP_S) {
         beep();
         lastBeepTime = audioCtx.currentTime;
       }
     } else {
       inTuneSince = null;
-      setHint(cents < 0 ? "Too low — tighten the string ↑" : "Too high — loosen the string ↓", "act");
+      setHint(cents < 0 ? "Too low \u2014 tighten the string \u2191" : "Too high \u2014 loosen the string \u2193", "act");
     }
   }
 
@@ -502,20 +795,11 @@
     return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
   }
 
-  // Nearest string by pitch distance in cents (octave-fair), not raw Hz
-  function nearestString(freq) {
-    let best = STRINGS[0], bestDist = Infinity;
-    for (const s of STRINGS) {
-      const d = Math.abs(Math.log2(freq / s.freq));
-      if (d < bestDist) { bestDist = d; best = s; }
-    }
-    return best;
-  }
-
-  // YIN pitch detection, search limited to the guitar range for speed
-  function yin(buf, sampleRate) {
-    const tauMin = Math.floor(sampleRate / MAX_FREQ);
-    const tauMax = Math.min(Math.floor(sampleRate / MIN_FREQ), buf.length >> 1);
+  // YIN pitch detection, search limited to [minFreq, maxFreq] for speed
+  function yin(buf, sampleRate, minFreq, maxFreq) {
+    const tauMin = Math.max(2, Math.floor(sampleRate / maxFreq));
+    const tauMax = Math.min(Math.floor(sampleRate / minFreq), buf.length >> 1);
+    if (tauMax <= tauMin) return -1;
     const yinBuf = new Float32Array(tauMax);
 
     for (let t = tauMin; t < tauMax; t++) {
@@ -527,10 +811,16 @@
       yinBuf[t] = sum;
     }
 
-    let runningSum = 0, tau = -1;
+    // Cumulative mean normalization — complete this pass fully BEFORE searching,
+    // otherwise the dip walk-down below would compare against unnormalized values.
+    let runningSum = 0;
     for (let t = tauMin; t < tauMax; t++) {
       runningSum += yinBuf[t];
       yinBuf[t] = runningSum === 0 ? 1 : yinBuf[t] * (t - tauMin + 1) / runningSum;
+    }
+
+    let tau = -1;
+    for (let t = tauMin; t < tauMax; t++) {
       if (yinBuf[t] < YIN_THRESHOLD) {
         while (t + 1 < tauMax && yinBuf[t + 1] < yinBuf[t]) t++;
         tau = t;
@@ -548,6 +838,10 @@
     const betterTau = denom === 0 ? tau : tau + (s2 - s0) / denom;
     return sampleRate / betterTau;
   }
+
+  // ---------- Init ----------
+  setA4(440);
+  buildStrings();
 })();
 </script>
 </body>
